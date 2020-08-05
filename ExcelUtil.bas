@@ -2,193 +2,246 @@ Attribute VB_Name = "ExcelUtil"
 Option Explicit
 
 Private evtSht As New EvtSheet
+Private evtBk As New EvtBook
 
-'''Try to open a workbook, if already opened,set it to active.
-Function TryOpenWorkbook(path, rdOnly As Boolean) As Workbook
+'''エクセルを開く
+'''読み取り専用指定が可能
+Function TryOpenBook(str, rd) As Workbook
+    On Error Resume Next
     Dim bk As Workbook
     For Each bk In Workbooks
-        If bk.FullName = path Then
+        If bk.FullName = Trim(str) Then
             bk.Activate
-            Set TryOpenWorkbook = bk
+            If rd Then
+                bk.ChangeFileAccess xlReadOnly
+            Else
+                bk.ChangeFileAccess xlReadWrite
+            End If
+            
+            Set TryOpenBook = bk
             Exit Function
         End If
     Next
     
-    Set TryOpenWorkbook = Workbooks.Open(path, rdOnly)
+    Set TryOpenBook = Workbooks.Open(str, readonly:=rd)
+    TryOpenBook.Activate
+    On Error GoTo 0
 End Function
 
-'''SetShortcutKeys
-Sub SetShortcutKeys()
-    Dim sht As Worksheet
-    Set sht = ThisWorkbook.Sheets("ShortcutKeys")
-    Dim row
-    For row = 2 To sht.Rows.Count
-        If sht.Cells(row, 2).Text = Empty Then
+'''ショートカットキー設定
+Sub SetShotCutKeys()
+    Dim Row As Long
+    Dim rdSht As Worksheet
+    Set rdSht = ThisWorkbook.Sheets("ショートカット")
+    For Row = 2 To 100
+        If rdSht.Cells(Row, 1).Value = Empty Then
             Exit For
         End If
-        'Application.MacroOptions Macro:=sht.Cells(row, 3).Text, ShortcutKey:=""
-        Debug.Print "OnKey:" + StringUtil.TransferShorcutKey(sht.Cells(row, 2).Text) + "," + sht.Cells(row, 3).Text
-        Application.OnKey StringUtil.TransferShorcutKey(sht.Cells(row, 2).Text), sht.Cells(row, 3).Text
+        
+        Application.OnKey TranslateKey(rdSht.Cells(Row, 2).Text), rdSht.Cells(Row, 3).Text
     Next
 End Sub
 
-'''MultiInput
-Sub MultiInput()
-Attribute MultiInput.VB_ProcData.VB_Invoke_Func = " \n"
-    Dim str
-    str = Constant.MultiInput.Text
-    Dim rng As Range
-    Dim targetRng As Range
-    Set targetRng = Selection
-    Set rng = targetRng.Cells(1, 1)
-    Dim formula As String
-    On Error Resume Next
-    formula = rng.formula
-    On Error GoTo 0
-    If Left(formula, 1) = "=" Then
-    ElseIf formula <> Empty Then
-    End If
-    
-    
-End Sub
-
-
-'''CopySheetName
-Sub CopySheetName()
-Attribute CopySheetName.VB_ProcData.VB_Invoke_Func = " \n"
-    SystemUtil.SetClipboard ActiveWorkbook.FullName
-    MsgBox "Copy the workbook path:" + vbCrLf + vbCrLf + ActiveWorkbook.FullName
-End Sub
-
-'''FindSheet
-Sub FindSheet()
-    Dim resultList As New Collection
-    Dim str
-    str = Constant.FindSheet.Text
-    str = InputBox("Sheet name to find:", Default:=str)
-    If str <> "" Then
-        Constant.FindSheet.Value = str
-        Dim sht As Worksheet
-        For Each sht In ActiveWorkbook.Sheets
-            If RegTest(sht.Name, Replace(str, "*", ".*")) Then
-                resultList.Add sht.Name
-            End If
-        Next
+'''組み合わせキーを翻訳
+'ex:"SHIFT+CTRL+ALT+R"→"+^%R"
+Function TranslateKey(str) As String
+    Dim strs
+    strs = Split(str, "+")
+    Dim i As Integer
+    Dim strTemp As String
+    For i = 0 To UBound(strs)
+        strTemp = strs(i)
+        strTemp = Trim(strTemp)
+        strTemp = Replace(strTemp, "SHIFT", "+")
+        strTemp = Replace(strTemp, "CTRL", "^")
+        strTemp = Replace(strTemp, "ALT", "%")
+        'strTemp = Replace(strTemp, "ENTER", "~")
+        TranslateKey = TranslateKey + strTemp
         
-        If resultList.Count = 0 Then
-            MsgBox "No result!"
-        ElseIf resultList.Count = 1 Then
-            ActiveWorkbook.Sheets(resultList(1)).Activate
-        Else
-            
-        End If
-    End If
-    
-
-End Sub
-
-'''FindTargetRow
-Function FindTargetRow(str As String, sht As Worksheet, col As Integer) As Long
-    Dim row As Long
-    For row = 1 To sht.Rows.Count
-        If sht.Cells(row, col).Text = str Then
-            FindTargetRow = row
-            Exit Function
-        End If
     Next
 End Function
 
-'''SetSelectionGriding
-Sub SetSelectionGriding()
-    Dim rngStr
-    rngStr = Trim(SelectionGriding.Text)
-    
-    If rngStr = Empty Then
-        rngStr = InputBox("Input target Range")
-    End If
-    If rngStr = Empty Then
-        Exit Sub
-    End If
-    
-    SelectionGriding.Value = rngStr
-    
 
-    ActiveSheet.Range(rngStr).FormatConditions.Add Type:=xlExpression, Operator:=-1, Formula1:="=OR(ROW()=CELL(" & """" & "row" & """" & "),COLUMN()=CELL(" & """" & "col" & """" & "))", Formula2:=""
-    ActiveSheet.Range(rngStr).FormatConditions(1).SetFirstPriority
-    ActiveSheet.Range(rngStr).FormatConditions(1).Interior.Pattern = xlPatternSolid
-    ActiveSheet.Range(rngStr).FormatConditions(1).Interior.PatternColorIndex = -4105
-    ActiveSheet.Range(rngStr).FormatConditions(1).Interior.PatternTintAndShade = 0
-    ActiveSheet.Range(rngStr).FormatConditions(1).Interior.Color = 65535
-    ActiveSheet.Range(rngStr).FormatConditions(1).Interior.TintAndShade = 0
-    ActiveSheet.Range(rngStr).FormatConditions(1).StopIfTrue = False
+'''シート名検索
+Sub SearchSheet()
+    Dim resultArr As New Collection
+    Dim bk As Workbook
+    Set bk = ActiveWorkbook
+    Dim searchStr As String
+    
+    searchStr = InputBox("シート名キーワードを入力してください（*で省略できます）：", "シート名入力", Constant.SheetSearchStr.Text)
+    If searchStr <> Empty Then
+        SheetSearchStr.Value = searchStr
+        Dim sht As Worksheet
+        For Each sht In bk.Sheets
+            If StringUtil.RegExMatch("*" + searchStr + "*", sht.Name) Then
+                resultArr.Add sht
+            End If
+            
+        Next
+        
+        If resultArr.Count = 0 Then
+            MsgBox "対象シートがみつかりませんでした。"
+        ElseIf resultArr.Count = 1 Then
+            resultArr(1).Activate
+        Else
+            SheetSelectionForm.setResultArr resultArr
+            SheetSelectionForm.Show
+        End If
+    End If
 
-    Set evtSht.evtSht = ActiveSheet
+End Sub
+
+'''ブックパスコピー
+Sub CopyBookPath()
+    SysUtil.PutInClipboard ActiveWorkbook.FullName
+    MsgBox "下記パスをコピーしました：" + vbCrLf + vbCrLf + ActiveWorkbook.FullName
+End Sub
+
+'''複数セルインプット
+Sub MultiInput()
+
+    Dim rng As Range
+    Set rng = Selection
+    On Error Resume Next
+    Dim formula
+    formula = rng(1, 1).Validation.Formula1
+    On Error GoTo 0
+    If formula <> Empty Then
+
+        If Left(formula, 1) = "=" Then
+            formula = Evaluate(formula)
+            InputForm.ShowInputFormList rng, formula
+        Else
+            InputForm.ShowInputFormArr rng, Split(formula, ",")
+        End If
+        
+    Else
+        Dim inputStr As String
+        
+        inputStr = InputBox("入力内容を入力してください：", "複数セル一括入力", Constant.MultiInputString.Text)
+        If inputStr <> Empty Then
+            Constant.MultiInputString.Value = inputStr
+            
+            Dim cel As Range
+            For Each cel In rng
+                If cel.Rows.Hidden = False And cel.Columns.Hidden = False And (cel.Value = Empty Or Constant.MultiInputOverwrite.Value = "〇") Then
+                    cel.Value = inputStr
+                End If
+            Next
+        End If
+    End If
+End Sub
+
+'''選択内容を合併したように見せる
+Sub DoSelectionLikeCombined()
+'
+' Macro1 Macro
+'
+
+'
+    Selection.Borders(xlDiagonalDown).LineStyle = xlNone
+    Selection.Borders(xlDiagonalUp).LineStyle = xlNone
+    With Selection.Borders(xlEdgeLeft)
+        .LineStyle = xlContinuous
+        .ColorIndex = 0
+        .TintAndShade = 0
+        .Weight = xlThin
+    End With
+    With Selection.Borders(xlEdgeTop)
+        .LineStyle = xlContinuous
+        .ColorIndex = 0
+        .TintAndShade = 0
+        .Weight = xlThin
+    End With
+    With Selection.Borders(xlEdgeBottom)
+        .LineStyle = xlContinuous
+        .ColorIndex = 0
+        .TintAndShade = 0
+        .Weight = xlThin
+    End With
+    With Selection.Borders(xlEdgeRight)
+        .LineStyle = xlContinuous
+        .ColorIndex = 0
+        .TintAndShade = 0
+        .Weight = xlThin
+    End With
+    Selection.Borders(xlInsideVertical).LineStyle = xlNone
+    Selection.Borders(xlInsideHorizontal).LineStyle = xlNone
+
+'    With Selection.Font
+'        .ThemeColor = xlThemeColorDark1
+'    End With
+End Sub
+
+'''シート複数コピー
+Sub MultiCopySheet()
+
+    Dim num
+    num = CInt(InputBox("何個分コピーするのか？"))
+    
+    Dim copyFromSht As Worksheet
+    Set copyFromSht = ActiveSheet
+    Dim newSht As Worksheet
+    
+    Dim i
+    For i = 1 To num
+        Call copyFromSht.Copy(After:=copyFromSht)
+        Set newSht = ActiveSheet
+        newSht.Name = CStr(CInt(copyFromSht.Name) + 1)
+        Set copyFromSht = newSht
+    Next
+
 End Sub
 
 
-'// 指定ワークブックに指定フォルダ配下のモジュールをインポートする
-'// 引数１：ワークブック
-'// 引数２：モジュール格納フォルダパス
-Sub ImportAll(a_TargetBook As Workbook, a_sModulePath As String)
-    On Error Resume Next
+'''正規表現でクリア
+Sub ClearByRegExp()
+    Dim cel As Range
     
-    Dim oFso        As New FileSystemObject     '// FileSystemObjectオブジェクト
-    Dim sArModule() As String                   '// モジュールファイル配列
-    Dim sModule                                 '// モジュールファイル
-    Dim sExt        As String                   '// 拡張子
-    Dim iMsg                                    '// MsgBox関数戻り値
-    
-    iMsg = MsgBox("同名のモジュールは上書きします。よろしいですか？", vbOKCancel, "上書き確認")
-    If (iMsg <> vbOK) Then
-        Exit Sub
-    End If
-    
-    ReDim sArModule(0)
-    
-    '// 全モジュールのファイルパスを取得
-    Call searchAllFile(a_sModulePath, sArModule)
-    
-    '// 全モジュールをループ
-    For Each sModule In sArModule
-        '// 拡張子を小文字で取得
-        sExt = LCase(oFso.GetExtensionName(sModule))
-        
-        '// 拡張子がcls、frm、basのいずれかの場合
-        If (sExt = "cls" Or sExt = "frm" Or sExt = "bas") Then
-            '// 同名モジュールを削除
-            Call a_TargetBook.VBProject.VBComponents.Remove(a_TargetBook.VBProject.VBComponents(oFso.GetBaseName(sModule)))
-            '// モジュールを追加
-            Call a_TargetBook.VBProject.VBComponents.Import(sModule)
-            '// Import確認用ログ出力
-            Debug.Print sModule
+    For Each cel In Selection
+        If Not StringUtil.RegExMatch(Constant.ClearByRegRepSetting.Text, cel.Text) Then
+            cel.Clear
         End If
     Next
 End Sub
 
-'''ExportAll
-Sub ExportAll()
-    Dim module
-    Dim extension
-    Dim sPath
-    Dim sFilePath
-    
-    sPath = ThisWorkbook.path
-    
-    For Each module In ThisWorkbook.VBProject.VBComponents
-        If (module.Type = vbext_ct_ClassModule) Then
-            extension = "cls"
-        ElseIf (module.Type = vbext_ct_MSForm) Then
-            extension = "frm"
-        ElseIf (module.Type = vbext_ct_StdModule) Then
-            extension = "bas"
-        Else
-            GoTo CONTINUE
-        End If
-        
-        sFilePath = sPath & "\" & module.Name & "." & extension
-        Call module.Export(sFilePath)
-        
-        Debug.Print sFilePath
-CONTINUE:
+Function IsSelectedPCL(Row As Long, col As Integer) As Boolean
+    IsSelectedPCL = False
+    If Row = ActiveCell.Row Or col = ActiveCell.Column Then
+        IsSelectedPCL = True
+    ElseIf Trim(ActiveSheet.Cells(Row, ActiveCell.Column).Text) = "○" Then
+        IsSelectedPCL = True
+    End If
+End Function
+
+
+'test
+Sub test()
+    Dim vbc
+    For Each vbc In ThisWorkbook.VBProject.VBComponents
+        Debug.Print vbc.Name
+    Next
+End Sub
+
+'''F1キーを無効にしたメッセージを表示
+Sub DisableF1()
+    Application.StatusBar = "F1キーを無効にしています。有効にしたい場合は[" & ThisWorkbook.Name & "]を開かずにエクセルを再起動してください。"
+End Sub
+
+'''リサーチパネルを非表示に
+Sub DiableResearchPanel()
+    Application.CommandBars("Research").Enabled = False
+End Sub
+
+'''選択セルのフォーマットを「HH:mm:ss.000」に
+Sub SetHMS000()
+    Selection.NumberFormatLocal = "hh:mm:ss.000"
+End Sub
+
+Sub printSheetNames()
+    Dim sht As Worksheet
+    For Each sht In ActiveWorkbook.Sheets
+        Debug.Print sht.Name & vbTab & sht.Visible
     Next
 End Sub

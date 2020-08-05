@@ -7,13 +7,15 @@ Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = False
-
 Option Explicit
 
+ 
 Public WithEvents evtSht As Worksheet
 Attribute evtSht.VB_VarHelpID = -1
 
+ 
 Private Sub evtSht_SelectionChange(ByVal Target As Range)
     evtSht.Application.ScreenUpdating = True
     evtSht.Calculate
 End Sub
+

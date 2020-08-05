@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="Shift_JIS" ?>
+<project name="OracleDao" default="debug">
+
+	<!-- ==========================================================================================
+	      ビルドとWARファイル作成
+	     ========================================================================================== -->
+	<property name="debug" value="false" />
+
+	<property name="src"  location="../src" />
+	<property name="classes" location="./classes" />
+	<property name="libs" location="./lib" />
+
+
+	<property name="jarfile" location="OracleDao.jar" />
+
+
+	<path id="build.lib">
+		<fileset dir="${libs}" includes="*.jar" />
+	</path>
+
+
+
+	<target name="debug">
+		<antcall target="clear" />
+		<antcall target="compile">
+			<param name="debug" value="true"/>
+		</antcall>
+		<antcall target="makejar" />
+	</target>
+
+	<target name="clear">
+		<delete dir="${classes}" />
+		<delete file="${jarfile}" />
+		<mkdir dir="${classes}" />
+		<mkdir dir="${offline-contents}" />
+	</target>
+
+	<target name="compile">
+		<javac debug="${debug}" srcdir="${src}" destdir="${classes}" classpathref="build.lib" encoding="utf-8" includeantruntime="false"/>
+	</target>
+
+	<target name="makejar">
+		<jar destfile="${jarfile}" basedir="${classes}" />
+	</target>
+
+
+</project>
